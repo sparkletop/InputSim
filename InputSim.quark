@@ -1,0 +1,11 @@
+(
+  name: "InputSim",
+  summary: "A simple GUI for simulating incoming OSC data",
+  version: "0.0.1",
+  schelp: "InputSim.schelp",
+  dependencies: "",
+  license: "GNU GPL v3.0",
+  copyright: "Anders Eskildsen",
+  ext_dependency: "",
+  url: "https://github.com/sparkletop/InputSim"
+)
