@@ -56,7 +56,8 @@ InputSimStrip {
 		})
 		.align_(\center)
 		.maxDecimals_(0)
-		.clipLo_(range.start).clipHi_(range.end);
+		.clipLo_(range.start).clipHi_(range.end)
+		.value_(range.start);
 
 		this.prInitStreams(range.start, range.end);
 
@@ -138,7 +139,7 @@ InputSim {
 		updater.numBox = NumberBox()
 		.clipLo_(updater.spec.minval)
 		.clipHi_(updater.spec.maxval)
-		.maxDecimals_(2)
+		.maxDecimals_(0)
 		.step_((updater.spec.maxval-updater.spec.minval)*0.01)
 		.scroll_step_((updater.spec.maxval-updater.spec.minval)*0.01)
 		.align_(\center)
