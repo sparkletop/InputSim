@@ -1,0 +1,40 @@
+TITLE:: InputSim
+summary:: A GUI for simulating inbound OSC data
+categories:: External Control
+
+
+DESCRIPTION::
+Quickly set up a GUI for generating incoming data in the form of OSC messages. This is useful for simulating data from physical sensors, external controllers, etc.
+
+For more information about how to work with OSC, see link::Guides/OSC_communication:: and link::Classes/MIDIFunc::/link::Classes/MIDIdef::.
+
+CLASSMETHODS::
+
+METHOD:: new
+
+ARGUMENT:: paths
+A link::Classes/Symbol:: or an link::Classes/Array:: of link::Classes/Symbol::s describing the OSC path(s) to use for incoming, simulated data.
+
+ARGUMENT:: min
+Lower limit of possible values.
+
+ARGUMENT:: max
+Upper limit of possible values.
+
+ARGUMENT:: targetAddr
+A link::Classes/NetAddr:: to define an alternative destination for the generated OSC messages.
+
+INSTANCEMETHODS::
+
+EXAMPLES::
+
+code::
+// A simple example
+InputSim('/my/OSC/path');
+
+// Setting lower and upper limits
+InputSim('/custom/limits', -1000, 1000);
+
+// Multiple paths
+InputSim(['/luke', '/leia', '/yoda']);
+::
