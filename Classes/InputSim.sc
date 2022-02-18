@@ -1,8 +1,7 @@
 InputSimStrip {
-	var <path, range, limitRange,
-	streams, modes, mode,
+	var <path, range, streams, modes, currentMode,
 	sliderSpec, slider, modeMenu,
-	rangeSlider, numBox, <view;
+	rangeSlider, numBox, <panel, rangeText;
 
 	*new {
 		arg path, range;
@@ -11,26 +10,25 @@ InputSimStrip {
 
 	init {
 		sliderSpec = ControlSpec(range.start, range.end, \lin, 1);
+
 		modes = [
 			"Static",
 			"White noise",
 			"Brown noise",
-			"Lo rand",
-			"Hi rand"
+			"Low rand",
+			"High rand",
+			"Triangle",
+			"Gaussian"
 		];
 
-		limitRange = range;
-
-		mode = modes.first;
-
-		this.prInitStreams;
+		currentMode = modes.first;
 
 		modeMenu = PopUpMenu()
 		.items_(modes)
 		.value_(0)
 		.action_({ | menu |
 			rangeSlider.enabled_(menu.value > 0);
-			mode = modes[menu.value];
+			currentMode = modes[menu.value];
 		});
 
 		slider = Slider()
@@ -42,10 +40,14 @@ InputSimStrip {
 		rangeSlider = RangeSlider()
 		.enabled_(false)
 		.action_({ | slider |
-			limitRange.start = sliderSpec.map(slider.lo);
-			limitRange.end = sliderSpec.map(slider.hi);
-			this.prInitStreams;
+			var lo = sliderSpec.map(slider.lo),
+			hi = sliderSpec.map(slider.hi);
+			this.prInitStreams(lo, hi);
+			rangeText.string_(lo.asInteger.asString ++ ":" ++ hi.asInteger)
 		});
+
+		rangeText = StaticText()
+		.string_(range.start.asString ++ ":" ++ range.end);
 
 		numBox = NumberBox()
 		.action_({
@@ -54,14 +56,17 @@ InputSimStrip {
 		})
 		.align_(\center)
 		.maxDecimals_(0)
-		.clipLo_(0.01).clipHi_(range.end);
+		.clipLo_(range.start).clipHi_(range.end);
 
-		this.prInitStreams;
+		this.prInitStreams(range.start, range.end);
 
-		view = VLayout(
-			StaticText().string_(path),
+		panel = VLayout(
+			StaticText().string_("OSC path:" + path),
 			HLayout(slider, rangeSlider),
-			numBox,
+			HLayout(
+				numBox,
+				rangeText
+			),
 			modeMenu
 		);
 
@@ -69,169 +74,130 @@ InputSimStrip {
 	}
 
 	prInitStreams {
+		arg lo, hi;
 		streams = Dictionary.newFrom([
 			modes,
 			[
 				range.start,
-				Pwhite(limitRange.start, limitRange.end).asStream,
-				Pbrown(limitRange.start, limitRange.end, (limitRange.end-limitRange.start) * 0.1).asStream,
-				Pwhite().pow(4)
-				.linlin(0,1,limitRange.start,limitRange.end-((limitRange.end - limitRange.start) * 0.25)).asStream,
-				Pwhite().pow(4)
-				.linlin(0,1,limitRange.end,limitRange.start+((limitRange.end - limitRange.start) * 0.25)).asStream
+				Pwhite(lo, hi).asStream,
+				Pbrown(lo, hi, (hi-lo) * 0.1).asStream,
+				Pwhite().pow(4).linlin(0,1,lo,hi-((hi - lo) * 0.25)).asStream,
+				Pwhite().pow(4).linlin(0,1,hi,lo+((hi - lo) * 0.25)).asStream,
+				Pseq(Array.interpolation(50, lo, hi).mirror1).repeat.asStream,
+				Pgauss([lo, hi].mean, (hi-lo) / 6).asStream
 			]
 		].lace);
-
 	}
 
 	prNext {
-		numBox.valueAction_(streams[mode].next);
+		numBox.valueAction_(streams[currentMode].next);
 		^streams[modes.first];
 	}
 }
 
+
 InputSim {
-	var paths, min, max, waitMin, waitMax, targetAddr,
-	strips, stripsPanel, <window, onOffBtn, mainLoop, waiter;
+	var paths, min, max, targetAddr, strips, stripsPanel,
+	window, updater;
 
 	*new {
 		arg paths = ['/default'],
-		min = 0, max = 127,
-		waitMin = 0.01, waitMax = 2, targetAddr;
-		^super.newCopyArgs(paths, min, max, waitMin, waitMax, targetAddr).init;
-	}
-
-	free {
-		window.close;
+		min = 0, max = 127, targetAddr;
+		^super.newCopyArgs(paths, min, max, targetAddr).init;
 	}
 
 	init {
-		/*window !? {
-		strips.do({|s|s.stop});
-		window.close;
-		};*/
-
+		// Default values
 		if (paths.isKindOf(SequenceableCollection).not, {
 			paths = [paths.asSymbol];
 		});
 
-		/*if (min.isKindOf(SequenceableCollection).not, {
-			min = [min];
-		});
-
-		if (max.isKindOf(SequenceableCollection).not, {
-			max = [max];
-		});*/
-
-		waiter = (
-			spec: ControlSpec(waitMin, waitMax, 1.5),
-			time: [waitMax, waitMin].mean.round(0.1)
-		);
-
-		waiter.knob = Knob()
-		.action_({
-			waiter.numBox.value = waiter.spec.map(waiter.knob.value);
-			waiter.time = waiter.numBox.value;
-		});
-
-		waiter.numBox = NumberBox()
-		.clipLo_(waitMin).clipHi_(waitMax)
-		.maxDecimals_(2)
-		.step_((waitMax-waitMin)*0.01)
-		.scroll_step_((waitMax-waitMin)*0.01)
-		.align_(\center)
-		.maxWidth_(60)
-		.action_({ |box|
-			waiter.knob.value = waiter.spec.unmap(box.value);
-			waiter.time = box.value;
-		});
-
-		waiter.numBox.valueAction_(waiter.time);
-
-		//waiter.numBox.valueAction_(waiter.time);
-
-		//waiter.spec = ControlSpec(waitMin, waitMax, 1.5);
-
 		targetAddr = targetAddr ?? NetAddr.localAddr;
 
-		//waiter.time = waiter.time ?? [waitMax, waitMin].mean.round(0.1);
+		updater = (
+			spec: ControlSpec(1, 50, 2, 1, units: "Hz"),
+			freq: 2
+		);
 
+		// Initialize all strips
 		stripsPanel = HLayout();
 
 		strips = paths.collect{ |path|
 			var strip = InputSimStrip(path, Interval(min, max));
-			stripsPanel.add(strip.view);
+			stripsPanel.add(strip.panel);
 			strip;
 		};
 
-		mainLoop = Routine({
+		// Set up updater
+		updater.knob = Knob()
+		.action_({
+			updater.numBox.value = updater.spec.map(updater.knob.value);
+			updater.freq = updater.numBox.value;
+		});
+
+		updater.numBox = NumberBox()
+		.clipLo_(updater.spec.minval)
+		.clipHi_(updater.spec.maxval)
+		.maxDecimals_(2)
+		.step_((updater.spec.maxval-updater.spec.minval)*0.01)
+		.scroll_step_((updater.spec.maxval-updater.spec.minval)*0.01)
+		.align_(\center)
+		.maxWidth_(60)
+		.action_({ |box|
+			updater.knob.value = updater.spec.unmap(box.value);
+			updater.freq = box.value;
+		});
+
+		updater.numBox.valueAction_(updater.freq);
+
+		updater.routine = Routine({
 			{
 				strips.do{ |strip|
 					{
 						targetAddr.sendMsg(strip.path, strip.prNext);
 					}.defer;
 				};
-				waiter.time.wait;
+				updater.freq.reciprocal.wait;
 			}.loop
 		});
 
-		// on/off button
-		onOffBtn = Button().states_([
+		updater.onOffBtn = Button().states_([
 			["Off"],
-			["On", Color.black, Color(0.5,1,0.5)]
+			["On", Color.black, Color(0.5, 1, 0.5)]
 		]).action_({ | button |
 			if (button.value == 1,
-				{mainLoop.reset.play},
-				{mainLoop.stop},
+				{ updater.routine.reset.play },
+				{ updater.routine.stop },
 			);
 		});
 
-		// wait time control panel
-		/*waiter.numBox = NumberBox()
-		.clipLo_(waitMin).clipHi_(waitMax)
-		.maxDecimals_(2)
-		.step_((waitMax-waitMin)*0.01)
-		.scroll_step_((waitMax-waitMin)*0.01)
-		.align_(\center)
-		.maxWidth_(60)
-		.action_({ |box|
-			waiter.knob.value = waiter.spec.unmap(box.value);
-			waiter.time = box.value;
-		});
+		updater.panel = HLayout(
+			updater.onOffBtn,
+			/*StaticText()
+			.string_("Rate")
+			.align_(\right),*/
+			updater.numBox,
+			updater.knob,
+		)
+		.setStretch(1,10)
+		.setStretch(0,4);
 
-		waiter.knob = Knob()
-		.action_({
-			waiter.numBox.value = waiter.spec.map(waiter.knob.value);
-			waiter.time = waiter.numBox.value;
-		});
-
-		waiter.numBox.valueAction_(waiter.time);
-		*/
-
-		// put the elements together
+		// Put the GUI together
 		window = Window.new(
 			"InputSim",
 			Rect(
 				rrand(100,200),
 				rrand(100,200),
 				paths.size * 150,
-				500)
+				500
+			)
 		)
 		.alwaysOnTop_(true)
 		.layout_(VLayout(
-			HLayout(
-				onOffBtn,
-				StaticText()
-				.string_("Wait")
-				.align_(\right),
-				waiter.knob,
-				waiter.numBox
-			)
-			.setStretch(1,10)
-			.setStretch(0,4),
+			updater.panel,
 			stripsPanel
 		))
-		.onClose_({ mainLoop.stop })
+		.onClose_({ updater.routine.stop; })
 		.front;
 	}
 }
