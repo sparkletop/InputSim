@@ -14,6 +14,8 @@ Quarks.install("https://github.com/sparkletop/InputSim")
 
 In order to use any newly downloaded Quark, restart SuperCollider or recompile the class library.
 
+This assumes [git](https://git-scm.com/) is installed on your system. See the [SuperCollider docs](http://doc.sccode.org/Guides/UsingQuarks.html) for more info.
+
 ## Get started
 
 Run this line from within SuperCollider to start a simple InputSim GUI:
